@@ -241,6 +241,12 @@ class Measure(multiprocessing.Process):
         return routes_ref
 
     @asyncio.coroutine
+    def save_links(self, target, links, bucket="ref", ttl=30*24*60*60):
+        for ip0, nextHops in links.iteritems():
+            for ip1, count in nextHops.iteritems():
+                yield from self.save_hop(target, ip0, ip1, count, bucket, ttl)
+
+    @asyncio.coroutine
     def save_hop(self, target, ip0, ip1, count, bucket="ref", ttl=12*3600):
         expires = int(time.time()) + ttl
         p = RD.pipeline()
