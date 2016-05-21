@@ -20,6 +20,8 @@ import ipaddress
 import json
 import pprint
 import multiprocessing
+import redis
+import time
 from collections import defaultdict
 from ripe.atlas.cousteau import AtlasStream
 
@@ -27,6 +29,8 @@ WORK_QUEUE = multiprocessing.Queue()
 RESULT_QUEUE = multiprocessing.Queue()
 OTHER_QUEUE = multiprocessing.Queue()
 pp = pprint.PrettyPrinter(indent=4)
+RD = redis.StrictRedis(host='localhost', port=6379, db=0)
+ONE_HOUR = 60*60
 
 def dd():
     return defaultdict(int)
@@ -60,8 +64,12 @@ class Measure(multiprocessing.Process):
 
         dstIp = traceroute["dst_addr"]
         srcIp = traceroute["from"]
+        ts = int(traceroute["timestamp"])
+        bucket = self.make_time_bucket(ts)
         prevIps = [srcIp] * 3
         currIps = []
+
+        self.print_measurement(traceroute, bucket)
 
         for hop in traceroute["result"]:
             if not self.isValidHop(hop):
@@ -73,11 +81,13 @@ class Measure(multiprocessing.Process):
                     continue
                 for prevIp in prevIps:
                     next_hops[prevIp][ip] += 1
+                    count = next_hops[prevIp][ip]
+                    self.save_hop(dstIp, prevIp, ip, count, bucket, 6 * ONE_HOUR)
                 currIps.append(ip)
             prevIps = currIps
             currIps = []
         # Measure.print_routes(next_hops)
-        self.RESULT_QUEUE.put((dstIp, next_hops))
+        # self.RESULT_QUEUE.put((dstIp, next_hops))
 
     @asyncio.coroutine
     def isPrivate(self, ip):
@@ -85,6 +95,9 @@ class Measure(multiprocessing.Process):
             return False
         ipaddr = ipaddress.ip_address(ip)
         return ipaddr.is_private
+
+    def make_time_bucket(self, ts, minutes=60):
+        return 'time_bucket/%d' % (ts // (60 * minutes))
 
     def isValidMeasurement(self, msm):
         return msm and "result" in msm and "dst_addr" in msm
@@ -99,6 +112,61 @@ class Measure(multiprocessing.Process):
     def print_routes(routes):
         data_as_dict = json.loads(json.dumps(routes))
         pp.pprint(data_as_dict)
+
+    def print_measurement(self, msm, bucket):
+        srcIp = msm["from"]
+        print("TS: {}, SRC: {}, DST: {} ({}) - Bucket: {}, Seen: {}".format(
+            msm['timestamp'],
+            msm['src_addr'],
+            msm['dst_addr'],
+            msm['dst_name'],
+            bucket,
+            self.has_target(srcIp, bucket)))
+
+
+    def save_hop(self, target, ip0, ip1, count, bucket="ref", ttl=12*3600):
+        expires = int(time.time()) + ttl
+        p = RD.pipeline()
+
+        # a list of time bucket names
+        p.sadd("time_buckets", bucket)
+
+        # a set of all dst addr
+        target_key = "targets_{}".format(bucket)
+        p.sadd(target_key, target)
+
+        # a set of hops for each target dst addr
+        target_to_hops = "hops_{}_{}".format(bucket, target)
+
+        # a set of ip0_ip1 pairs for each target
+        target_to_routes = "routes_{}_{}".format(bucket, target)
+
+        # holds the total counters
+        route_count_key = "route_{}_{}_{}_{}".format(bucket, target, ip0, ip1)
+        route_key = "{}_{}_{}".format(bucket, ip0, ip1)
+        p.sadd(target_to_hops, ip0)
+
+        p.sadd(target_to_routes, route_key)
+        p.incrby(route_count_key, count)
+
+        # Set the expiration for all keys
+        p.expireat(bucket, expires)
+        p.expireat(target_key, expires)
+        p.expireat(target_to_hops, expires)
+        p.expireat(target_to_hops, expires)
+        p.expireat(target_to_routes, expires)
+        p.expireat(route_count_key, expires)
+
+        p.execute()
+
+    def get_route(self, target, ip0, ip1, bucket="ref"):
+        route_count_key = "route_{}_{}_{}_{}".format(bucket, target, ip0, ip1)
+        return RD.get(route_count_key)
+
+    def has_target(self, target, bucket="ref"):
+        return RD.sismember("targets_{}".format(bucket), target)
+
+
 
 
 class IPMatcher(multiprocessing.Process):
