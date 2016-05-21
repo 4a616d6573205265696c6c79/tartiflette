@@ -100,7 +100,7 @@ class Measure(multiprocessing.Process):
         return ipaddr.is_private
 
     async def make_time_bucket(self, ts, minutes=60):
-        return 'time_bucket/{}'.format(ts / (60 * minutes))
+        return 'time_bucket/{}'.format(ts // (60 * minutes))
 
     async def isValidMeasurement(self, msm):
         return msm and "result" in msm and "dst_addr" in msm
@@ -145,6 +145,11 @@ class Measure(multiprocessing.Process):
                 # print("route: {} -> {} => {}".format(ip0, ip1, int(count)))
                 routes[target][ip0][ip1] = count
         return routes
+
+    #def compare_buckets(self, reference, bucket):
+
+
+
 
 
     async def save_hop(self, target, ip0, ip1, count, bucket="ref", ttl=12*3600):
@@ -251,12 +256,12 @@ def on_result_recieved(*args):
     """Add the trqceroute result to a queue to be processed"""
     WORK_QUEUE.put(args[0])
 
-
 def stream_results(seconds=None, filters={}):
     """Set up the atlas stream for all traceroute results"""
     atlas_stream = AtlasStream()
     atlas_stream.connect()
     atlas_stream.bind_channel('result', on_result_recieved)
+    # stream_parameters = {"type": "traceroute", "passThroughPrefix": "76.26.120.98"}
     stream_parameters = {"type": "traceroute"}
     stream_parameters.update(filters)
     print("Before streaming")
