@@ -5,7 +5,7 @@ The IMC submission on which this is based is
 [*Pinpointing Delay and Forwarding Anomalies Using Large-Scale Traceroute Measurements*](http://arxiv.org/abs/1605.04784)
 Romain Fontugne, Emile Aben, Cristel Pelsser, Randy Bush
 
-The goal is to use the RIPE Atlas streaming data to analyse and detect anomalies using the Tartiflette code from Romain Fontugne <romain@iij.ad.jp>.
+The goal is to use the RIPE Atlas streaming data to analyse and detect anomalies using the Tartiflette code from Romain Fontugne \<romain@iij.ad.jp\>.
 
 project github https://github.com/4a616d6573205265696c6c79/tartiflette
 
