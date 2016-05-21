@@ -182,17 +182,20 @@ class Measure(multiprocessing.Process):
     def compare_buckets(self, reference, bucket, target):
         """from routeChangeDetection function"""
         bucket_ts = int(bucket.split("/")[1]) # time_bucket/406642
-        ts = datetime.utcfromtimestamp(bucket_ts * 3600) # todo: use a param
-        routes = self.get_target_links(bucket, target)
-        routes_ref = self.get_target_links(reference, target)
+        # ts = datetime.utcfromtimestamp(bucket_ts * 3600) # todo: use a param
+        ts = bucket_ts * 3600 # todo: use a param
+        bucket_links = self.get_time_bucket(bucket)
+        reference_links = self.get_time_bucket(reference)
+        routes = self.get_target_routes(bucket_links, target)
+        routes_ref = self.get_target_routes(reference_links, target)
         alarms = []
         alpha = PARAMS["alpha"]
 
-        for ip0, nextHops in routes.iteritems():
+        for ip0, nextHops in routes.items():
             nextHopsRef = routes_ref[ip0]
             allHops = set(["0"])
             for key in set(nextHops.keys()).union(
-                    [k for k, v in nextHopsRef.iteritems() if
+                    [k for k, v in nextHopsRef.items() if
                      isinstance(v, float)]):
                 if nextHops[key] or nextHopsRef[key]:
                     allHops.add(key)
@@ -216,8 +219,8 @@ class Measure(multiprocessing.Process):
                         reported = True
                         alarm = {"ip": ip0, "corr": corr,
                                  "dst_ip": target,
-                                 "refNextHops": list(nextHopsRef.iteritems()),
-                                 "obsNextHops": list(nextHops.iteritems()),
+                                 "refNextHops": list(nextHopsRef.items()),
+                                 "obsNextHops": list(nextHops.items()),
                                  "nbSamples": nbSamples,
                                  "nbPeers": len(count),
                                  "nbSeen": nextHopsRef["stats"]["nbSeen"]}
@@ -236,8 +239,9 @@ class Measure(multiprocessing.Process):
             nextHopsRef["stats"]["lastSeen"] = ts
 
             for ip1 in allHops:
-                newCount = nextHops[ip1]
-                nextHopsRef[ip1] = (1.0 - alpha) * nextHopsRef[ip1] + alpha * newCount
+                newCount = int(nextHops[ip1])
+                # print("newCount: {}".format(newCount))
+                nextHopsRef[ip1] = int((1.0 - alpha) * nextHopsRef[ip1] + alpha * int(newCount))
         return routes_ref
 
     @asyncio.coroutine
@@ -388,9 +392,11 @@ if __name__ == '__main__':
     v6_nets = args['--v6_nets']
     if args['-s']:
         measure = Measure(RESULT_QUEUE, OTHER_QUEUE)
-        measure.get_time_bucket('time_bucket/406641')
-        ref = measure.compare_buckets('reference', 'time_bucket/406641', '76.26.120.98')
-        Measure.print_routes(ref)
+        bucket = 'time_bucket/406641'
+        targets = measure.get_targets(bucket)
+        for target in targets:
+            ref = measure.compare_buckets('reference', bucket, target)
+        # Measure.print_routes(ref)
         exit()
     procs = []
     measure = Measure(RESULT_QUEUE, OTHER_QUEUE)
