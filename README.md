@@ -39,17 +39,23 @@ Where do we store the results?  For starters, just in memory.  This is
 one of 42 places that the next stages could improve.
 
 With ten processes, in 13 seconds we extract ten Comcast traceroute
-results from the full stream.
+results from the full stream.  Daniel and Massimo convinced us that this
+was not going to stand up to peak loads,
 
-We had to make a decision whether to leave the code dealing with RTTs
-and path changes, as the inherited code was binning every hour.  We
-could adjust the bin size, say to ten or 20 minutes, but going to a
-sliding window stream would be a non-trivial code change.  We decided to
-do a 20 minute bin size and come back later.
+It seems that the network is the bottleneck between the Atlas producer
+and our client consumer.  Below the socket level.  Massimo hacked the
+producer to filter on a prefix list, but we had to load it one prefix at
+a time.
+
+We had to decide whether to leave the code dealing with RTTs and path
+changes, as inherited, binning every hour.  We could adjust the bin
+size, say to ten or 20 minutes.  But going to a sliding window stream
+would be a non-trivial code change.  We decided to do a 20 minute bin
+size and come back later.
 
 #### Things to do Later
 * Change from binning at 20 minutes to a moving window
 * Hope the RIPE Labs API would do the per-AS filtering so we could
-  remove the code
+  remove the code on the client side.
 * Store a large number of results on the client side so the user can
   go back and forth in time
