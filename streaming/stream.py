@@ -19,6 +19,8 @@ import multiprocessing
 from ripe.atlas.cousteau import AtlasStream
 
 WORK_QUEUE = multiprocessing.Queue()
+RESULT_QUEUE = multiprocessing.Queue()
+
 
 class IPMatcher(multiprocessing.Process):
     NETWORKS = {
@@ -32,8 +34,9 @@ class IPMatcher(multiprocessing.Process):
         ],
     }
 
-    def __init__(self, queue):
-        self.QUEUE = queue
+    def __init__(self, work_queue, result_queue):
+        self.WORK_QUEUE = work_queue
+        self.RESULT_QUEUE = result_queue
         policy = asyncio.get_event_loop_policy()
         policy.set_event_loop(policy.new_event_loop())
         self.LOOP = asyncio.get_event_loop()
@@ -43,8 +46,8 @@ class IPMatcher(multiprocessing.Process):
     def main(self):
         """Loop forever looking for work from the queue"""
         while True:
-            if not self.QUEUE.empty():
-                traceroute = self.QUEUE.get()
+            if not self.WORK_QUEUE.empty():
+                traceroute = self.WORK_QUEUE.get()
                 yield from self.filter_hop_rtt(traceroute)
 
     def run(self):
@@ -61,14 +64,16 @@ class IPMatcher(multiprocessing.Process):
                     continue
                 for address in hop['result']:
                     if 'from' in address.keys():
-                        res = yield from self.is_comcast_ip(address['from'])
+                        res = yield from self.in_monitored_network(
+                            address['from']
+                        )
                         if res:
                             yield print(m_result)
                             return None
 
     @asyncio.coroutine
-    def is_comcast_ip(self, ip_address):
-        """Returns true if this is a comcast IP address"""
+    def in_monitored_network(self, ip_address):
+        """Returns true if this is in one of our monitored networks"""
         address = ipaddress.ip_address(ip_address)
         for network in self.NETWORKS[address.version]:
             if address in network:
@@ -79,6 +84,7 @@ class IPMatcher(multiprocessing.Process):
 def on_result_recieved(*args):
     """Add the trqceroute result to a queue to be processed"""
     WORK_QUEUE.put(args[0])
+
 
 def stream_results(seconds=None, filters={}):
     """Set up the atlas stream for all traceroute results"""
@@ -91,6 +97,7 @@ def stream_results(seconds=None, filters={}):
     atlas_stream.timeout(seconds=seconds)
     atlas_stream.disconnect()
 
+
 if __name__ == '__main__':
     """Start up one worker process to deal with handling checking traceroute
     results, and just use the main thread to read from atlas."""
@@ -99,7 +106,7 @@ if __name__ == '__main__':
     policy.set_event_loop(policy.new_event_loop())
     procs = []
     for i in range(int(args['--num_procs'])):
-        proc = IPMatcher(WORK_QUEUE)
+        proc = IPMatcher(WORK_QUEUE, RESULT_QUEUE)
         procs.append(proc)
         proc.start()
     if args['--time']:
