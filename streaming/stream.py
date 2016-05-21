@@ -25,6 +25,7 @@ def filter_hop_rtt(*args):
             for address in hop['result']:
                 if 'from' in address.keys() and is_comcast_ip(address['from']):
                     print(m_result)
+                    return None
 
 def is_comcast_ip(ip_address):
     """Returns true if this is a comcast IP address"""
