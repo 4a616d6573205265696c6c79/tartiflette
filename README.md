@@ -40,7 +40,8 @@ one of 42 places that the next stages could improve.
 
 With ten processes, in 13 seconds we extract ten Comcast traceroute
 results from the full stream.  Daniel and Massimo convinced us that this
-was not going to stand up to peak loads,
+was not going to stand up to peak loads.  The front of the funnel was
+getting on the order fo 50,000 traceroutes per minute.
 
 It seems that the network is the bottleneck between the Atlas producer
 and our client consumer.  Below the socket level.  Massimo hacked the
