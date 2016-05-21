@@ -1,16 +1,16 @@
-import asyncio
+# import asyncio
 import ipaddress
 import multiprocessing
 from ripe.atlas.cousteau import AtlasStream
 
 NETWORKS = {
     4: [
-        ipaddress.ip_network(net.strip(), strict=False) for net in
-        open('../v4.txt').readlines()
+        ipaddress.ip_network(u'{}'.format(net.strip()), strict=False) for
+        net in open('../v4.txt').readlines()
     ],
     6: [
-        ipaddress.ip_network(net.strip(), strict=False) for net in
-        open('../Comcast-v6-Space').readlines()
+        ipaddress.ip_network(u'{}'.format(net.strip()), strict=False) for
+        net in open('../Comcast-v6-Space').readlines()
     ],
 }
 
