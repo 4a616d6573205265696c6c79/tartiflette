@@ -1,4 +1,5 @@
-Tartiflette - Near Real-Time Anomaly Detection from RIPE Atlas Stream
+#Tartiflette
+### Near Real-Time Anomaly Detection from RIPE Atlas Stream
 
 The goal is to use the RIPE Atlas streaming data to analyse and detect anomalies using the Tartiflette code from Romain.
 
