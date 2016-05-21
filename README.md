@@ -25,7 +25,8 @@ from IMC paper](https://github.com/romain-fontugne/ripeAtlasDetector)
 which used static data.  And [Romain's code for the
 webpage](https://github.com/romain-fontugne/django-ihr).
 
-Root analysis code wanted raw traceroute data.
+The analysis code wanted raw traceroute data.  Some fun was had
+interpreting what the Atlas stream delivered.
 
 FaceBook's anchor was down so we chose Comcast which had two anchors up.
 
