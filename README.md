@@ -2,19 +2,13 @@
 ### Near Real-Time Anomaly Detection from RIPE Atlas Stream
 
 #### Participants
-Alexandru Manea \<alexandru@fb.com\>
-
-Cristel Pelsser \<pelsser@unistra.fr\>
-
-James Reggie Reilly \<james@gethostbyname.org\>
-
-Randy Bush \<randy@psg.com\>
-
-Razan K Abdallah \<r.k.nasr@gmail.com\>
-
-Romain Fontugne \<romain@iij.ad.jp\> (in Tokyo)
-
-Wenqin Shao \<wenqin.shao@telecom-paristech.fr\>
+* Alexandru Manea \<alexandru@fb.com\>
+* Cristel Pelsser \<pelsser@unistra.fr\>
+* James Reggie Reilly \<james@gethostbyname.org\>
+* Randy Bush \<randy@psg.com\>
+* Razan K Abdallah \<r.k.nasr@gmail.com\>
+* Romain Fontugne \<romain@iij.ad.jp\> (in Tokyo)
+* Wenqin Shao \<wenqin.shao@telecom-paristech.fr\>
 
 The IMC submission on which this is based is
 [*Pinpointing Delay and Forwarding Anomalies Using Large-Scale Traceroute Measurements*](http://arxiv.org/abs/1605.04784)
