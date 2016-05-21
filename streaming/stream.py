@@ -55,6 +55,7 @@ class Measure(multiprocessing.Process):
             if not self.WORK_QUEUE.empty():
                 traceroute = self.WORK_QUEUE.get()
                 await self.process(traceroute)
+            await asyncio.sleep(1)
 
     def run(self):
         self.LOOP.run_until_complete(self.main())
@@ -214,6 +215,7 @@ class IPMatcher(multiprocessing.Process):
             if not self.WORK_QUEUE.empty():
                 traceroute = self.WORK_QUEUE.get()
                 await self.filter_hop_rtt(traceroute)
+            await asyncio.sleep(1)
 
 
     def run(self):
