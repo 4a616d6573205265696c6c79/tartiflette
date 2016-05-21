@@ -4,11 +4,13 @@ tartiflette
 Program to analyse real-time traceroute inormation for routing changes.
 
 Usage:
-    tartiflette --num_procs=<NUM>
+    tartiflette --num_procs=<NUM> [--time=<SECONDS>]
 
 Options:
     --num_procs=<NUM>   Number of worker processes to spin up to handle
                         load. Uses one asyncio event loop per process.
+    --time=<SECONDS>    Number of seconds to run the analysis for. If
+                        ommitted, run forever.
 """
 import asyncio
 import docopt
@@ -78,7 +80,7 @@ def on_result_recieved(*args):
     """Add the trqceroute result to a queue to be processed"""
     WORK_QUEUE.put(args[0])
 
-def stream_results(filters={}):
+def stream_results(seconds=None, filters={}):
     """Set up the atlas stream for all traceroute results"""
     atlas_stream = AtlasStream()
     atlas_stream.connect()
@@ -86,7 +88,8 @@ def stream_results(filters={}):
     stream_parameters = {"type": "traceroute"}
     stream_parameters.update(filters)
     atlas_stream.start_stream(stream_type="result", **stream_parameters)
-    atlas_stream.timeout()
+    atlas_stream.timeout(seconds=seconds)
+    atlas_stream.disconnect()
 
 if __name__ == '__main__':
     """Start up one worker process to deal with handling checking traceroute
@@ -94,7 +97,16 @@ if __name__ == '__main__':
     args = docopt.docopt(__doc__)
     policy = asyncio.get_event_loop_policy()
     policy.set_event_loop(policy.new_event_loop())
+    procs = []
     for i in range(int(args['--num_procs'])):
-        proc = IPMatcher(WORK_QUEUE).start()
-    stream_results()
-
+        proc = IPMatcher(WORK_QUEUE)
+        procs.append(proc)
+        proc.start()
+    if args['--time']:
+        seconds = int(args['--time'])
+    else:
+        seconds = None
+    stream_results(seconds)
+    for proc in procs:
+        proc.terminate()
+    exit()
