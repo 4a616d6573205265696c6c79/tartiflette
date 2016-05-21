@@ -4,7 +4,7 @@ tartiflette
 Program to analyse real-time traceroute inormation for routing changes.
 
 Usage:
-    tartiflette --num_procs=<NUM> --v4_nets=<V4_FILE> --v6_nets=<V6_FILE>[--time=<SECONDS>] [-s]
+    tartiflette --num_procs=<NUM> --v4_nets=<V4_FILE> --v6_nets=<V6_FILE>[--time=<SECONDS>] [-b=<bucket>]
 
 Options:
     --num_procs=<NUM>   Number of worker processes to spin up to handle
@@ -13,7 +13,7 @@ Options:
                         ommitted, run forever.
     --v4_nets=<V4_FILE> File with a list of v4 networks
     --v6_nets=<V6_FILE> File with a list of v6 networks
-    -s                  Print the bucket stats
+    -b=<bucket_name>    Compute stats for this time bucket
 """
 import asyncio
 import docopt
@@ -390,9 +390,9 @@ if __name__ == '__main__':
     policy.set_event_loop(policy.new_event_loop())
     v4_nets = args['--v4_nets']
     v6_nets = args['--v6_nets']
-    if args['-s']:
+    bucket = args['-b']  # 'time_bucket/406642'
+    if bucket:
         measure = Measure(RESULT_QUEUE, OTHER_QUEUE)
-        bucket = 'time_bucket/406641'
         targets = measure.get_targets(bucket)
         for target in targets:
             ref = measure.compare_buckets('reference', bucket, target)
