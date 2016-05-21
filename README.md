@@ -14,12 +14,12 @@ The IMC submission on which this is based is
 [*Pinpointing Delay and Forwarding Anomalies Using Large-Scale Traceroute Measurements*](http://arxiv.org/abs/1605.04784)
 Romain Fontugne, Emile Aben, Cristel Pelsser, Randy Bush
 
-The goal is to use the RIPE Atlas streaming data to analyse and detect
+The goal was to use the RIPE Atlas streaming data to analyse and detect
 anomalies using the Tartiflette code from Romain.
 
 [The project github](https://github.com/4a616d6573205265696c6c79/tartiflette)
 
-Started from [Daniel's data collector attaching to Massimo's
+We started from [Daniel's data collector attaching to Massimo's
 stream](https://github.com/dfkbg/Traceroute-Streaming).  [Romain's code
 from IMC paper](https://github.com/romain-fontugne/ripeAtlasDetector)
 which used static data.  And [Romain's code for the
@@ -27,11 +27,11 @@ webpage](https://github.com/romain-fontugne/django-ihr).
 
 Root analysis code wanted raw traceroute data.
 
-FaceBook anchor was down so we chose Comcast which had two anchors up.
+FaceBook's anchor was down so we chose Comcast which had two anchors up.
 
-Atlas Streaming API would not let us filter by "all traceroutes which
-pass through one or mode links in AS X."  So we had to accept the full
-stream and do our own filtering on the client side.  Therefore we
+The Atlas Streaming API would not let us filter by "all traceroutes
+which pass through one or mode links in AS X."  So we had to accept the
+full stream and do our own filtering on the client side.  Therefore we
 gathered the list of prefixes in Comcast's ASs.  Jason gave us a list of
 Comcast prefixs; it was highly un-aggregated, but we aggregated them.
 
