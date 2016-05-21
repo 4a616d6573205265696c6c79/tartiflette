@@ -15,11 +15,90 @@ Options:
 import asyncio
 import docopt
 import ipaddress
+import json
+import pprint
 import multiprocessing
+from collections import defaultdict
 from ripe.atlas.cousteau import AtlasStream
 
 WORK_QUEUE = multiprocessing.Queue()
 RESULT_QUEUE = multiprocessing.Queue()
+OTHER_QUEUE = multiprocessing.Queue()
+pp = pprint.PrettyPrinter(indent=4)
+
+def dd():
+    return defaultdict(int)
+
+class Measure(multiprocessing.Process):
+    def __init__(self, work_queue, result_queue):
+        self.WORK_QUEUE = work_queue
+        self.RESULT_QUEUE = result_queue
+        policy = asyncio.get_event_loop_policy()
+        policy.set_event_loop(policy.new_event_loop())
+        self.LOOP = asyncio.get_event_loop()
+        super().__init__()
+
+    @asyncio.coroutine
+    def main(self):
+        """Loop forever looking for work from the queue"""
+        while True:
+            if not self.WORK_QUEUE.empty():
+                traceroute = self.WORK_QUEUE.get()
+                yield from self.process(traceroute)
+
+    def run(self):
+        self.LOOP.run_until_complete(self.main())
+
+    @asyncio.coroutine
+    def process(self, traceroute):
+        next_hops = defaultdict(dd)
+
+        if not self.isValidMeasurement(traceroute):
+            return
+
+        dstIp = traceroute["dst_addr"]
+        srcIp = traceroute["from"]
+        prevIps = [srcIp] * 3
+        currIps = []
+
+        for hop in traceroute["result"]:
+            if not self.isValidHop(hop):
+                continue
+            for hopid, res in enumerate(hop["result"]):
+                ip = res.get("from", "x")
+                is_private = yield from self.isPrivate(ip)
+                if is_private:
+                    continue
+                for prevIp in prevIps:
+                    next_hops[prevIp][ip] += 1
+                currIps.append(ip)
+            prevIps = currIps
+            currIps = []
+        # Measure.print_routes(next_hops)
+        self.RESULT_QUEUE.put((dstIp, next_hops))
+
+    @asyncio.coroutine
+    def isPrivate(self, ip):
+        if ip == "x":
+            return False
+        ipaddr = ipaddress.ip_address(ip)
+        return ipaddr.is_private
+
+    def isValidMeasurement(self, msm):
+        return msm and "result" in msm and "dst_addr" in msm
+
+    def isValidTraceResult(self, result):
+        return result and not "error" in result["result"][0]
+
+    def isValidHop(self, hop):
+        return hop and "result" in hop and not "err" in hop["result"][0]
+
+    @staticmethod
+    def print_routes(routes):
+        data_as_dict = json.loads(json.dumps(routes))
+        pp.pprint(data_as_dict)
+
+
 
 
 class IPMatcher(multiprocessing.Process):
@@ -49,6 +128,8 @@ class IPMatcher(multiprocessing.Process):
             if not self.WORK_QUEUE.empty():
                 traceroute = self.WORK_QUEUE.get()
                 yield from self.filter_hop_rtt(traceroute)
+
+
 
     def run(self):
         self.LOOP.run_until_complete(self.main())
@@ -107,8 +188,11 @@ if __name__ == '__main__':
     procs = []
     for i in range(int(args['--num_procs'])):
         proc = IPMatcher(WORK_QUEUE, RESULT_QUEUE)
+        measure = Measure(RESULT_QUEUE, OTHER_QUEUE)
         procs.append(proc)
+        procs.append(measure)
         proc.start()
+        measure.start()
     if args['--time']:
         seconds = int(args['--time'])
     else:
