@@ -23,6 +23,8 @@ import pprint
 import multiprocessing
 import redis
 import time
+import numpy as np
+from datetime import datetime
 from collections import defaultdict
 from ripe.atlas.cousteau import AtlasStream
 
@@ -32,6 +34,14 @@ OTHER_QUEUE = multiprocessing.Queue()
 pp = pprint.PrettyPrinter(indent=4)
 RD = redis.StrictRedis(host='localhost', port=6379, db=0)
 ONE_HOUR = 60*60
+PARAMS = {
+    "timeWindow": 60 * 60,  # in seconds
+    "alpha": 0.01,  # parameter for exponential smoothing
+    "minCorr": -0.25,
+    "minSeen": 3,
+    "af": "6",
+}
+
 
 def dd():
     return defaultdict(int)
@@ -127,30 +137,101 @@ class Measure(multiprocessing.Process):
             await self.has_target(srcIp, bucket)))
 
     def get_time_bucket(self, bucket):
-        targets_key = "targets_{}".format(bucket)
-        targets = RD.smembers(targets_key)
         routes = defaultdict(all_routes)
-        for _target in targets:
-            target = _target.decode()
-            # print("Target: {}".format(target))
-
-            target_to_routes_key = "routes_{}_{}".format(bucket, target)
-            target_to_routes = RD.smembers(target_to_routes_key)
-            for route in target_to_routes:
-                _route = route.decode()
-                _, _, ip0, ip1 = route.decode().split("_")
+        targets = self.get_targets(bucket)
+        for target in targets:
+            links = self.get_target_links(bucket, target)
+            for (ip0, ip1) in links:
                 route_count_key = "route_{}_{}_{}_{}".format(bucket, target, ip0, ip1)
                 count = RD.get(route_count_key)
-
                 # print("route: {} -> {} => {}".format(ip0, ip1, int(count)))
                 routes[target][ip0][ip1] = count
         return routes
 
-    #def compare_buckets(self, reference, bucket):
+    def get_target_routes(self, routes, target):
+        return routes[target]
+
+    def get_targets(self, bucket):
+        """Returns all destination ips in a time bucket"""
+        targets_key = "targets_{}".format(bucket)
+        targets = RD.smembers(targets_key)
+        return [t.decode() for t in targets]
 
 
+    def get_target_links(self, bucket, target):
+        """Returns a list of ip0-ip1 tuples for a particular target in a bucket"""
+        target_to_routes_key = "routes_{}_{}".format(bucket, target)
+        target_to_routes = RD.smembers(target_to_routes_key)
+        links = []
+        for route in target_to_routes:
+            _route = route.decode()
+            # todo: use a regexp for this instead of a split
+            # since the bucket contains an underscore
+            _, _, ip0, ip1 = route.decode().split("_")
+            links.append((ip0, ip1))
+        return links
 
 
+    def compare_buckets(self, reference, bucket, target):
+        """from routeChangeDetection function"""
+        bucket_ts = int(bucket.split("/")[1]) # time_bucket/406642
+        ts = datetime.utcfromtimestamp(bucket_ts * 3600) # todo: use a param
+        routes = self.get_target_links(bucket, target)
+        routes_ref = self.get_target_links(reference, target)
+        alarms = []
+        alpha = PARAMS["alpha"]
+
+        for ip0, nextHops in routes.iteritems():
+            nextHopsRef = routes_ref[ip0]
+            allHops = set(["0"])
+            for key in set(nextHops.keys()).union(
+                    [k for k, v in nextHopsRef.iteritems() if
+                     isinstance(v, float)]):
+                if nextHops[key] or nextHopsRef[key]:
+                    allHops.add(key)
+
+            reported = False
+            nbSamples = np.sum(nextHops.values())
+            nbSamplesRef = np.sum([x for x in nextHopsRef.values() if isinstance(x, int)])
+            if len(allHops) > 2 and "stats" in nextHopsRef and nextHopsRef["stats"]["nbSeen"] >= PARAMS["minSeen"]:
+                count = []
+                countRef = []
+                for ip1 in allHops:
+                    count.append(nextHops[ip1])
+                    countRef.append(nextHopsRef[ip1])
+
+                if len(count) > 1:
+                    if np.std(count) == 0 or np.std(countRef) == 0:
+                        print("{}, {}, {}, {}".format(allHops, countRef, count, nextHopsRef))
+                    corr = np.corrcoef(count, countRef)[0][1]
+                    if corr < PARAMS["minCorr"]:
+
+                        reported = True
+                        alarm = {"ip": ip0, "corr": corr,
+                                 "dst_ip": target,
+                                 "refNextHops": list(nextHopsRef.iteritems()),
+                                 "obsNextHops": list(nextHops.iteritems()),
+                                 "nbSamples": nbSamples,
+                                 "nbPeers": len(count),
+                                 "nbSeen": nextHopsRef["stats"]["nbSeen"]}
+
+                        print("Alarm: {}".format(alarm))
+                        alarms.append(alarm)
+
+            # Update the reference
+            if not "stats" in nextHopsRef:
+                nextHopsRef["stats"] = {"nbSeen": 0, "firstSeen": ts, "lastSeen": ts, "nbReported": 0}
+
+            if reported:
+                nextHopsRef["stats"]["nbReported"] += 1
+
+            nextHopsRef["stats"]["nbSeen"] += 1
+            nextHopsRef["stats"]["lastSeen"] = ts
+
+            for ip1 in allHops:
+                newCount = nextHops[ip1]
+                nextHopsRef[ip1] = (1.0 - alpha) * nextHopsRef[ip1] + alpha * newCount
+        return routes_ref
 
     async def save_hop(self, target, ip0, ip1, count, bucket="ref", ttl=12*3600):
         expires = int(time.time()) + ttl
@@ -290,6 +371,8 @@ if __name__ == '__main__':
     if args['-s']:
         measure = Measure(RESULT_QUEUE, OTHER_QUEUE)
         measure.get_time_bucket('time_bucket/406641')
+        ref = measure.compare_buckets('reference', 'time_bucket/406641', '76.26.120.98')
+        Measure.print_routes(ref)
         exit()
     procs = []
     measure = Measure(RESULT_QUEUE, OTHER_QUEUE)
