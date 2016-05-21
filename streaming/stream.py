@@ -4,7 +4,7 @@ tartiflette
 Program to analyse real-time traceroute inormation for routing changes.
 
 Usage:
-    tartiflette --num_procs=<NUM> --v4_nets=<V4_FILE> --v6_nets=<V6_FILE> [--time=<SECONDS>]
+    tartiflette --num_procs=<NUM> --v4_nets=<V4_FILE> --v6_nets=<V6_FILE>[--time=<SECONDS>] [-s]
 
 Options:
     --num_procs=<NUM>   Number of worker processes to spin up to handle
@@ -13,6 +13,7 @@ Options:
                         ommitted, run forever.
     --v4_nets=<V4_FILE> File with a list of v4 networks
     --v6_nets=<V6_FILE> File with a list of v6 networks
+    -s                  Print the bucket stats
 """
 import asyncio
 import docopt
@@ -34,6 +35,10 @@ ONE_HOUR = 60*60
 
 def dd():
     return defaultdict(int)
+
+def all_routes():
+    return defaultdict(dd)
+
 
 class Measure(multiprocessing.Process):
     def __init__(self, work_queue, result_queue):
@@ -120,6 +125,26 @@ class Measure(multiprocessing.Process):
             bucket,
             await self.has_target(srcIp, bucket)))
 
+    def get_time_bucket(self, bucket):
+        targets_key = "targets_{}".format(bucket)
+        targets = RD.smembers(targets_key)
+        routes = defaultdict(all_routes)
+        for _target in targets:
+            target = _target.decode()
+            # print("Target: {}".format(target))
+
+            target_to_routes_key = "routes_{}_{}".format(bucket, target)
+            target_to_routes = RD.smembers(target_to_routes_key)
+            for route in target_to_routes:
+                _route = route.decode()
+                _, _, ip0, ip1 = route.decode().split("_")
+                route_count_key = "route_{}_{}_{}_{}".format(bucket, target, ip0, ip1)
+                count = RD.get(route_count_key)
+
+                # print("route: {} -> {} => {}".format(ip0, ip1, int(count)))
+                routes[target][ip0][ip1] = count
+        return routes
+
 
     async def save_hop(self, target, ip0, ip1, count, bucket="ref", ttl=12*3600):
         expires = int(time.time()) + ttl
@@ -149,7 +174,6 @@ class Measure(multiprocessing.Process):
         # Set the expiration for all keys
         p.expireat(bucket, expires)
         p.expireat(target_key, expires)
-        p.expireat(target_to_hops, expires)
         p.expireat(target_to_hops, expires)
         p.expireat(target_to_routes, expires)
         p.expireat(route_count_key, expires)
@@ -233,6 +257,7 @@ def stream_results(seconds=None, filters={}):
     atlas_stream.bind_channel('result', on_result_recieved)
     stream_parameters = {"type": "traceroute"}
     stream_parameters.update(filters)
+    print("Before streaming")
     atlas_stream.start_stream(stream_type="result", **stream_parameters)
     atlas_stream.timeout(seconds=seconds)
     atlas_stream.disconnect()
@@ -246,6 +271,10 @@ if __name__ == '__main__':
     policy.set_event_loop(policy.new_event_loop())
     v4_nets = args['--v4_nets']
     v6_nets = args['--v6_nets']
+    if args['-s']:
+        measure = Measure(RESULT_QUEUE, OTHER_QUEUE)
+        measure.get_time_bucket('time_bucket/406641')
+        exit()
     procs = []
     measure = Measure(RESULT_QUEUE, OTHER_QUEUE)
     measure.start()
