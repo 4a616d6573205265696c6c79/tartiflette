@@ -68,7 +68,7 @@ class IPMatcher(multiprocessing.Process):
                             address['from']
                         )
                         if res:
-                            yield print(m_result)
+                            self.RESULT_QUEUE.put(m_result)
                             return None
 
     @asyncio.coroutine
