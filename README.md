@@ -54,7 +54,7 @@ getting on the order fo 50,000 traceroutes per minute.
 It seems that the network is the bottleneck between the Atlas producer
 and our client consumer.  Below the socket level.  Massimo hacked the
 producer to filter on a prefix list, but we had to load it one prefix at
-a time.
+a time.  We finally migrated to this.
 
 We had to decide whether to leave the code dealing with RTTs and path
 changes, as inherited, binning every hour.  We could adjust the bin
