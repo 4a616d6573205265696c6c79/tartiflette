@@ -247,13 +247,13 @@ if __name__ == '__main__':
     v4_nets = args['--v4_nets']
     v6_nets = args['--v6_nets']
     procs = []
+    measure = Measure(RESULT_QUEUE, OTHER_QUEUE)
+    measure.start()
+    procs.append(measure)
     for i in range(int(args['--num_procs'])):
         proc = IPMatcher(WORK_QUEUE, RESULT_QUEUE, v4_nets, v6_nets)
-        measure = Measure(RESULT_QUEUE, OTHER_QUEUE)
         procs.append(proc)
-        procs.append(measure)
         proc.start()
-        measure.start()
     if args['--time']:
         seconds = int(args['--time'])
     else:
