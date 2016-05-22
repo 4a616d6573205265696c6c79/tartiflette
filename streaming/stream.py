@@ -220,7 +220,6 @@ class IPMatcher(multiprocessing.Process):
             if not self.WORK_QUEUE.empty():
                 traceroute = self.WORK_QUEUE.get()
                 await self.filter_hop_rtt(traceroute)
-            await asyncio.sleep(1)
 
 
     def run(self):
@@ -246,6 +245,7 @@ class IPMatcher(multiprocessing.Process):
     # The lovely folks at ripe added in some server side filtering for
     # prefixes, to this code isn't really needed now. Leaving it in just
     # in case anyone wants to do further filtering of the data
+    # UPDATE: server side is a WIP, we still need this
     async def in_monitored_network(self, ip_address):
         """Returns true if this is in one of our monitored networks"""
         address = ipaddress.ip_address(ip_address)
@@ -267,10 +267,13 @@ def stream_results(v4_nets, v6_nets, seconds=None, filters={}):
     prefixes = []
     prefixes.extend([net.strip() for net in open(v4_nets).readlines()])
     prefixes.extend([net.strip() for net in open(v6_nets).readlines()])
-    for prefix in prefixes:
-        stream_parameters = {"type": "traceroute", "passThroughPrefix": prefix}
-        stream_parameters.update(filters)
-        atlas_stream.start_stream(stream_type="result", **stream_parameters)
+#     for prefix in prefixes:
+#         stream_parameters = {"type": "traceroute", "passThroughPrefix": prefix}
+#         stream_parameters.update(filters)
+#         atlas_stream.start_stream(stream_type="result", **stream_parameters)
+    stream_parameters = {"type": "traceroute"}
+    stream_parameters.update(filters)
+    atlas_stream.start_stream(stream_type="result", **stream_parameters)
     print("Before streaming")
     atlas_stream.timeout(seconds=seconds)
     atlas_stream.disconnect()
