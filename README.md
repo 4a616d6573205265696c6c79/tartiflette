@@ -37,7 +37,8 @@ gathered the list of prefixes in Comcast's ASs.  Jason gave us a list of
 Comcast prefixs; it was highly un-aggregated, but we aggregated them.
 
 Where do we store the results?  For starters, just in memory.  This is
-one of 42 places that the next stages could improve.
+one of 42 things that the next stages could improve.  But we decided to
+take the minimal non-damaging path to results.
 
 With ten processes, in 13 seconds we extract ten Comcast traceroute
 results from the full stream.  Daniel and Massimo convinced us that this
@@ -54,6 +55,13 @@ changes, as inherited, binning every hour.  We could adjust the bin
 size, say to ten or 20 minutes.  But going to a sliding window stream
 would be a non-trivial code change.  We decided to do a 20 minute bin
 size and come back later.
+
+For the record, the IP addresses of the Comcast anchors are
+Probe | IPv4 | IPv6
+----- | ---- | ----
+6072 | 76.26.120.98 | 2001:558:6010:2::2
+6080 | 76.26.115.194 | 2001:558:6000:4::2
+    
 
 #### Things to do Later
 * Change from binning at 20 minutes to a moving window
