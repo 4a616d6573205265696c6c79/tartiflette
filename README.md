@@ -56,7 +56,7 @@ size, say to ten or 20 minutes.  But going to a sliding window stream
 would be a non-trivial code change.  We decided to do a 20 minute bin
 size and come back later.
 
-For the record, the IP addresses of the Comcast anchors are\s\s
+For the record, the IP addresses of the Comcast anchors are  
 | Probe | IPv4          | IPv6               |
 | ----- | ------------- | ------------------ |
 | 6072  | 76.26.120.98  | 2001:558:6010:2::2 |
