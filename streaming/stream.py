@@ -4,13 +4,15 @@ tartiflette
 Program to analyse real-time traceroute inormation for routing changes.
 
 Usage:
-    tartiflette --num_procs=<NUM> [--time=<SECONDS>]
+    tartiflette --num_procs=<NUM> --v4_nets=<V4_FILE> --v6_nets=<V6_FILE>[--time=<SECONDS>]
 
 Options:
     --num_procs=<NUM>   Number of worker processes to spin up to handle
                         load. Uses one asyncio event loop per process.
     --time=<SECONDS>    Number of seconds to run the analysis for. If
                         ommitted, run forever.
+    --v4_nets=<V4_FILE> File with a list of v4 networks
+    --v6_nets=<V6_FILE> File with a list of v6 networks
 """
 import asyncio
 import docopt
@@ -99,26 +101,24 @@ class Measure(multiprocessing.Process):
         pp.pprint(data_as_dict)
 
 
-
-
 class IPMatcher(multiprocessing.Process):
-    NETWORKS = {
-        4: [
-            ipaddress.ip_network(u'{}'.format(net.strip()), strict=False) for
-            net in open('../v4.txt').readlines()
-        ],
-        6: [
-            ipaddress.ip_network(u'{}'.format(net.strip()), strict=False) for
-            net in open('../Comcast-v6-Space').readlines()
-        ],
-    }
 
-    def __init__(self, work_queue, result_queue):
+    def __init__(self, work_queue, result_queue, v4_nets, v6_nets):
         self.WORK_QUEUE = work_queue
         self.RESULT_QUEUE = result_queue
         policy = asyncio.get_event_loop_policy()
         policy.set_event_loop(policy.new_event_loop())
         self.LOOP = asyncio.get_event_loop()
+        self.NETWORKS = {
+            4: [
+                ipaddress.ip_network(u'{}'.format(net.strip()), strict=False) for
+                net in open(v4_nets).readlines()
+            ],
+            6: [
+                ipaddress.ip_network(u'{}'.format(net.strip()), strict=False) for
+                net in open(v6_nets).readlines()
+            ],
+        }
         super().__init__()
 
     @asyncio.coroutine
@@ -128,7 +128,6 @@ class IPMatcher(multiprocessing.Process):
             if not self.WORK_QUEUE.empty():
                 traceroute = self.WORK_QUEUE.get()
                 yield from self.filter_hop_rtt(traceroute)
-
 
 
     def run(self):
@@ -185,9 +184,11 @@ if __name__ == '__main__':
     args = docopt.docopt(__doc__)
     policy = asyncio.get_event_loop_policy()
     policy.set_event_loop(policy.new_event_loop())
+    v4_nets = args['--v4_nets']
+    v6_nets = args['--v6_nets']
     procs = []
     for i in range(int(args['--num_procs'])):
-        proc = IPMatcher(WORK_QUEUE, RESULT_QUEUE)
+        proc = IPMatcher(WORK_QUEUE, RESULT_QUEUE, v4_nets, v6_nets)
         measure = Measure(RESULT_QUEUE, OTHER_QUEUE)
         procs.append(proc)
         procs.append(measure)
