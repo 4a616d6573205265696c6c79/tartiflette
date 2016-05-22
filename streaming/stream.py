@@ -4,7 +4,7 @@ tartiflette
 Program to analyse real-time traceroute inormation for routing changes.
 
 Usage:
-    tartiflette --num_procs=<NUM> --v4_nets=<V4_FILE> --v6_nets=<V6_FILE>[--time=<SECONDS>]
+    tartiflette --num_procs=<NUM> --v4_nets=<V4_FILE> --v6_nets=<V6_FILE> [--time=<SECONDS>]
 
 Options:
     --num_procs=<NUM>   Number of worker processes to spin up to handle
@@ -44,68 +44,65 @@ class Measure(multiprocessing.Process):
         self.LOOP = asyncio.get_event_loop()
         super().__init__()
 
-    @asyncio.coroutine
-    def main(self):
+    async def main(self):
         """Loop forever looking for work from the queue"""
         while True:
             if not self.WORK_QUEUE.empty():
                 traceroute = self.WORK_QUEUE.get()
-                yield from self.process(traceroute)
+                await self.process(traceroute)
 
     def run(self):
         self.LOOP.run_until_complete(self.main())
 
-    @asyncio.coroutine
-    def process(self, traceroute):
+    async def process(self, traceroute):
         next_hops = defaultdict(dd)
 
-        if not self.isValidMeasurement(traceroute):
+        if not await self.isValidMeasurement(traceroute):
             return
 
         dstIp = traceroute["dst_addr"]
         srcIp = traceroute["from"]
         ts = int(traceroute["timestamp"])
-        bucket = self.make_time_bucket(ts)
+        bucket = await self.make_time_bucket(ts)
         prevIps = [srcIp] * 3
         currIps = []
 
-        self.print_measurement(traceroute, bucket)
+        await self.print_measurement(traceroute, bucket)
 
         for hop in traceroute["result"]:
-            if not self.isValidHop(hop):
+            if not await self.isValidHop(hop):
                 continue
             for hopid, res in enumerate(hop["result"]):
                 ip = res.get("from", "x")
-                is_private = yield from self.isPrivate(ip)
+                is_private = await self.isPrivate(ip)
                 if is_private:
                     continue
                 for prevIp in prevIps:
                     next_hops[prevIp][ip] += 1
                     count = next_hops[prevIp][ip]
-                    self.save_hop(dstIp, prevIp, ip, count, bucket, 6 * ONE_HOUR)
+                    await self.save_hop(dstIp, prevIp, ip, count, bucket, 6 * ONE_HOUR)
                 currIps.append(ip)
             prevIps = currIps
             currIps = []
         # Measure.print_routes(next_hops)
         # self.RESULT_QUEUE.put((dstIp, next_hops))
 
-    @asyncio.coroutine
-    def isPrivate(self, ip):
+    async def isPrivate(self, ip):
         if ip == "x":
             return False
         ipaddr = ipaddress.ip_address(ip)
         return ipaddr.is_private
 
-    def make_time_bucket(self, ts, minutes=60):
-        return 'time_bucket/%d' % (ts // (60 * minutes))
+    async def make_time_bucket(self, ts, minutes=60):
+        return 'time_bucket/{}'.format(ts / (60 * minutes))
 
-    def isValidMeasurement(self, msm):
+    async def isValidMeasurement(self, msm):
         return msm and "result" in msm and "dst_addr" in msm
 
-    def isValidTraceResult(self, result):
+    async def isValidTraceResult(self, result):
         return result and not "error" in result["result"][0]
 
-    def isValidHop(self, hop):
+    async def isValidHop(self, hop):
         return hop and "result" in hop and not "err" in hop["result"][0]
 
     @staticmethod
@@ -113,7 +110,7 @@ class Measure(multiprocessing.Process):
         data_as_dict = json.loads(json.dumps(routes))
         pp.pprint(data_as_dict)
 
-    def print_measurement(self, msm, bucket):
+    async def print_measurement(self, msm, bucket):
         srcIp = msm["from"]
         print("TS: {}, SRC: {}, DST: {} ({}) - Bucket: {}, Seen: {}".format(
             msm['timestamp'],
@@ -121,10 +118,10 @@ class Measure(multiprocessing.Process):
             msm['dst_addr'],
             msm['dst_name'],
             bucket,
-            self.has_target(srcIp, bucket)))
+            await self.has_target(srcIp, bucket)))
 
 
-    def save_hop(self, target, ip0, ip1, count, bucket="ref", ttl=12*3600):
+    async def save_hop(self, target, ip0, ip1, count, bucket="ref", ttl=12*3600):
         expires = int(time.time()) + ttl
         p = RD.pipeline()
 
@@ -159,14 +156,12 @@ class Measure(multiprocessing.Process):
 
         p.execute()
 
-    def get_route(self, target, ip0, ip1, bucket="ref"):
+    async def get_route(self, target, ip0, ip1, bucket="ref"):
         route_count_key = "route_{}_{}_{}_{}".format(bucket, target, ip0, ip1)
         return RD.get(route_count_key)
 
-    def has_target(self, target, bucket="ref"):
+    async def has_target(self, target, bucket="ref"):
         return RD.sismember("targets_{}".format(bucket), target)
-
-
 
 
 class IPMatcher(multiprocessing.Process):
@@ -189,20 +184,18 @@ class IPMatcher(multiprocessing.Process):
         }
         super().__init__()
 
-    @asyncio.coroutine
-    def main(self):
+    async def main(self):
         """Loop forever looking for work from the queue"""
         while True:
             if not self.WORK_QUEUE.empty():
                 traceroute = self.WORK_QUEUE.get()
-                yield from self.filter_hop_rtt(traceroute)
+                await self.filter_hop_rtt(traceroute)
 
 
     def run(self):
         self.LOOP.run_until_complete(self.main())
 
-    @asyncio.coroutine
-    def filter_hop_rtt(self, traceroute):
+    async def filter_hop_rtt(self, traceroute):
         """Given a traceroute result, filter out the unnecessary data and
         hand off for analysis"""
         m_result = traceroute
@@ -212,15 +205,14 @@ class IPMatcher(multiprocessing.Process):
                     continue
                 for address in hop['result']:
                     if 'from' in address.keys():
-                        res = yield from self.in_monitored_network(
+                        res = await self.in_monitored_network(
                             address['from']
                         )
                         if res:
                             self.RESULT_QUEUE.put(m_result)
-                            return None
+        return None
 
-    @asyncio.coroutine
-    def in_monitored_network(self, ip_address):
+    async def in_monitored_network(self, ip_address):
         """Returns true if this is in one of our monitored networks"""
         address = ipaddress.ip_address(ip_address)
         for network in self.NETWORKS[address.version]:
