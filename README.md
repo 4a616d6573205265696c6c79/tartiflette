@@ -29,6 +29,12 @@ The analysis code wanted raw traceroute data.  Some fun was had
 interpreting what the Atlas stream delivered.
 
 FaceBook's anchor was down so we chose Comcast which had two anchors up.
+For the record, the IP addresses of the Comcast anchors are
+
+| Probe | IPv4          | IPv6               |
+| ----- | ------------- | ------------------ |
+| 6072  | 76.26.120.98  | 2001:558:6010:2::2 |
+| 6080  | 76.26.115.194 | 2001:558:6000:4::2 |
 
 The Atlas Streaming API would not let us filter by "all traceroutes
 which pass through one or mode links in AS X."  So we had to accept the
@@ -55,14 +61,6 @@ changes, as inherited, binning every hour.  We could adjust the bin
 size, say to ten or 20 minutes.  But going to a sliding window stream
 would be a non-trivial code change.  We decided to do a 20 minute bin
 size and come back later.
-
-For the record, the IP addresses of the Comcast anchors are
-
-| Probe | IPv4          | IPv6               |
-| ----- | ------------- | ------------------ |
-| 6072  | 76.26.120.98  | 2001:558:6010:2::2 |
-| 6080  | 76.26.115.194 | 2001:558:6000:4::2 |
-    
 
 #### Things to do Later
 * Change from binning at 20 minutes to a moving window
