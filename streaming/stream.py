@@ -243,6 +243,9 @@ class IPMatcher(multiprocessing.Process):
                             self.RESULT_QUEUE.put(m_result)
         return None
 
+    # The lovely folks at ripe added in some server side filtering for
+    # prefixes, to this code isn't really needed now. Leaving it in just
+    # in case anyone wants to do further filtering of the data
     async def in_monitored_network(self, ip_address):
         """Returns true if this is in one of our monitored networks"""
         address = ipaddress.ip_address(ip_address)
@@ -256,16 +259,19 @@ def on_result_recieved(*args):
     """Add the trqceroute result to a queue to be processed"""
     WORK_QUEUE.put(args[0])
 
-def stream_results(seconds=None, filters={}):
+def stream_results(v4_nets, v6_nets, seconds=None, filters={}):
     """Set up the atlas stream for all traceroute results"""
     atlas_stream = AtlasStream()
     atlas_stream.connect()
     atlas_stream.bind_channel('result', on_result_recieved)
-    # stream_parameters = {"type": "traceroute", "passThroughPrefix": "76.26.120.98"}
-    stream_parameters = {"type": "traceroute"}
-    stream_parameters.update(filters)
+    prefixes = []
+    prefixes.extend([net.strip() for net in open(v4_nets).readlines()])
+    prefixes.extend([net.strip() for net in open(v6_nets).readlines()])
+    for prefix in prefixes:
+        stream_parameters = {"type": "traceroute", "passThroughPrefix": prefix}
+        stream_parameters.update(filters)
+        atlas_stream.start_stream(stream_type="result", **stream_parameters)
     print("Before streaming")
-    atlas_stream.start_stream(stream_type="result", **stream_parameters)
     atlas_stream.timeout(seconds=seconds)
     atlas_stream.disconnect()
 
@@ -294,7 +300,7 @@ if __name__ == '__main__':
         seconds = int(args['--time'])
     else:
         seconds = None
-    stream_results(seconds)
+    stream_results(v4_nets, v6_nets, seconds)
     for proc in procs:
         proc.terminate()
     exit()
