@@ -4,8 +4,8 @@
 #### Participants
 * Alexandru Manea \<alexandru@fb.com\>
 * Cristel Pelsser \<pelsser@unistra.fr\>
-* James Reggie Reilly \<james@gethostbyname.org\> c  
-###### Consultants
+* James Reggie Reilly \<james@gethostbyname.org\>  
+#### Consultants
 * Randy Bush \<randy@psg.com\>
 * Razan K Abdallah \<r.k.nasr@gmail.com\>
 * Romain Fontugne \<romain@iij.ad.jp\> (in Tokyo)
