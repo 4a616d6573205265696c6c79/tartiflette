@@ -6,7 +6,7 @@
 * Cristel Pelsser \<pelsser@unistra.fr\>
 * James Reggie Reilly \<james@gethostbyname.org\> 
 
-#### Consultants
+#### Consultants & Groupies
 * Randy Bush \<randy@psg.com\>
 * Razan K Abdallah \<r.k.nasr@gmail.com\>
 * Romain Fontugne \<romain@iij.ad.jp\> (in Tokyo)
