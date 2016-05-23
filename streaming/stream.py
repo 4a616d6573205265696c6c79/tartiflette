@@ -4,7 +4,7 @@ tartiflette
 Program to analyse real-time traceroute inormation for routing changes.
 
 Usage:
-    tartiflette --num_procs=<NUM> --v4_nets=<V4_FILE> --v6_nets=<V6_FILE>[--time=<SECONDS>] [-s]
+    tartiflette --num_procs=<NUM> --v4_nets=<V4_FILE> --v6_nets=<V6_FILE>[--time=<SECONDS>] [-b=<bucket>]
 
 Options:
     --num_procs=<NUM>   Number of worker processes to spin up to handle
@@ -13,7 +13,7 @@ Options:
                         ommitted, run forever.
     --v4_nets=<V4_FILE> File with a list of v4 networks
     --v6_nets=<V6_FILE> File with a list of v6 networks
-    -s                  Print the bucket stats
+    -b=<bucket_name>    Compute stats for this time bucket
 """
 import asyncio
 import docopt
@@ -59,66 +59,72 @@ class Measure(multiprocessing.Process):
         self.LOOP = asyncio.get_event_loop()
         super().__init__()
 
-    async def main(self):
+    @asyncio.coroutine
+    def main(self):
         """Loop forever looking for work from the queue"""
         while True:
             if not self.WORK_QUEUE.empty():
                 traceroute = self.WORK_QUEUE.get()
-                await self.process(traceroute)
-            await asyncio.sleep(1)
+                yield from self.process(traceroute)
 
     def run(self):
         self.LOOP.run_until_complete(self.main())
 
-    async def process(self, traceroute):
+    @asyncio.coroutine
+    def process(self, traceroute):
         next_hops = defaultdict(dd)
-
-        if not await self.isValidMeasurement(traceroute):
+        res = yield from self.isValidMeasurement(traceroute)
+        if not res:
             return
 
         dstIp = traceroute["dst_addr"]
         srcIp = traceroute["from"]
         ts = int(traceroute["timestamp"])
-        bucket = await self.make_time_bucket(ts)
+        bucket = yield from self.make_time_bucket(ts)
         prevIps = [srcIp] * 3
         currIps = []
 
-        await self.print_measurement(traceroute, bucket)
+        yield from self.print_measurement(traceroute, bucket)
 
         for hop in traceroute["result"]:
-            if not await self.isValidHop(hop):
+            if not self.isValidHop(hop):
                 continue
             for hopid, res in enumerate(hop["result"]):
                 ip = res.get("from", "x")
-                is_private = await self.isPrivate(ip)
+                is_private = yield from self.isPrivate(ip)
                 if is_private:
                     continue
                 for prevIp in prevIps:
                     next_hops[prevIp][ip] += 1
                     count = next_hops[prevIp][ip]
-                    await self.save_hop(dstIp, prevIp, ip, count, bucket, 6 * ONE_HOUR)
+                    yield from self.save_hop(dstIp, prevIp, ip, count, bucket, 6 * ONE_HOUR)
                 currIps.append(ip)
             prevIps = currIps
             currIps = []
         # Measure.print_routes(next_hops)
         # self.RESULT_QUEUE.put((dstIp, next_hops))
 
-    async def isPrivate(self, ip):
+    @asyncio.coroutine
+    def isPrivate(self, ip):
         if ip == "x":
             return False
         ipaddr = ipaddress.ip_address(ip)
         return ipaddr.is_private
 
-    async def make_time_bucket(self, ts, minutes=60):
+    @asyncio.coroutine
+    def make_time_bucket(self, ts, minutes=60):
         return 'time_bucket/{}'.format(ts // (60 * minutes))
 
-    async def isValidMeasurement(self, msm):
+    @asyncio.coroutine
+    def isValidMeasurement(self, msm):
         return msm and "result" in msm and "dst_addr" in msm
 
-    async def isValidTraceResult(self, result):
+    @asyncio.coroutine
+    def isValidTraceResult(self, result):
         return result and not "error" in result["result"][0]
 
-    async def isValidHop(self, hop):
+    @asyncio.coroutine
+    def isValidHop(self, hop):
         return hop and "result" in hop and not "err" in hop["result"][0]
 
     @staticmethod
@@ -126,7 +132,8 @@ class Measure(multiprocessing.Process):
         data_as_dict = json.loads(json.dumps(routes))
         pp.pprint(data_as_dict)
 
-    async def print_measurement(self, msm, bucket):
+    @asyncio.coroutine
+    def print_measurement(self, msm, bucket):
         srcIp = msm["from"]
         print("TS: {}, SRC: {}, DST: {} ({}) - Bucket: {}, Seen: {}".format(
             msm['timestamp'],
@@ -134,7 +141,7 @@ class Measure(multiprocessing.Process):
             msm['dst_addr'],
             msm['dst_name'],
             bucket,
-            await self.has_target(srcIp, bucket)))
+            self.has_target(srcIp, bucket)))
 
     def get_time_bucket(self, bucket):
         routes = defaultdict(all_routes)
@@ -175,17 +182,20 @@ class Measure(multiprocessing.Process):
     def compare_buckets(self, reference, bucket, target):
         """from routeChangeDetection function"""
         bucket_ts = int(bucket.split("/")[1]) # time_bucket/406642
-        ts = datetime.utcfromtimestamp(bucket_ts * 3600) # todo: use a param
-        routes = self.get_target_links(bucket, target)
-        routes_ref = self.get_target_links(reference, target)
+        # ts = datetime.utcfromtimestamp(bucket_ts * 3600) # todo: use a param
+        ts = bucket_ts * 3600 # todo: use a param
+        bucket_links = self.get_time_bucket(bucket)
+        reference_links = self.get_time_bucket(reference)
+        routes = self.get_target_routes(bucket_links, target)
+        routes_ref = self.get_target_routes(reference_links, target)
         alarms = []
         alpha = PARAMS["alpha"]
 
-        for ip0, nextHops in routes.iteritems():
+        for ip0, nextHops in routes.items():
             nextHopsRef = routes_ref[ip0]
             allHops = set(["0"])
             for key in set(nextHops.keys()).union(
-                    [k for k, v in nextHopsRef.iteritems() if
+                    [k for k, v in nextHopsRef.items() if
                      isinstance(v, float)]):
                 if nextHops[key] or nextHopsRef[key]:
                     allHops.add(key)
@@ -209,8 +219,8 @@ class Measure(multiprocessing.Process):
                         reported = True
                         alarm = {"ip": ip0, "corr": corr,
                                  "dst_ip": target,
-                                 "refNextHops": list(nextHopsRef.iteritems()),
-                                 "obsNextHops": list(nextHops.iteritems()),
+                                 "refNextHops": list(nextHopsRef.items()),
+                                 "obsNextHops": list(nextHops.items()),
                                  "nbSamples": nbSamples,
                                  "nbPeers": len(count),
                                  "nbSeen": nextHopsRef["stats"]["nbSeen"]}
@@ -229,11 +239,19 @@ class Measure(multiprocessing.Process):
             nextHopsRef["stats"]["lastSeen"] = ts
 
             for ip1 in allHops:
-                newCount = nextHops[ip1]
-                nextHopsRef[ip1] = (1.0 - alpha) * nextHopsRef[ip1] + alpha * newCount
+                newCount = int(nextHops[ip1])
+                # print("newCount: {}".format(newCount))
+                nextHopsRef[ip1] = int((1.0 - alpha) * nextHopsRef[ip1] + alpha * int(newCount))
         return routes_ref
 
-    async def save_hop(self, target, ip0, ip1, count, bucket="ref", ttl=12*3600):
+    @asyncio.coroutine
+    def save_links(self, target, links, bucket="ref", ttl=30*24*60*60):
+        for ip0, nextHops in links.iteritems():
+            for ip1, count in nextHops.iteritems():
+                yield from self.save_hop(target, ip0, ip1, count, bucket, ttl)
+
+    @asyncio.coroutine
+    def save_hop(self, target, ip0, ip1, count, bucket="ref", ttl=12*3600):
         expires = int(time.time()) + ttl
         p = RD.pipeline()
 
@@ -267,11 +285,12 @@ class Measure(multiprocessing.Process):
 
         p.execute()
 
-    async def get_route(self, target, ip0, ip1, bucket="ref"):
+    @asyncio.coroutine
+    def get_route(self, target, ip0, ip1, bucket="ref"):
         route_count_key = "route_{}_{}_{}_{}".format(bucket, target, ip0, ip1)
         return RD.get(route_count_key)
 
-    async def has_target(self, target, bucket="ref"):
+    def has_target(self, target, bucket="ref"):
         return RD.sismember("targets_{}".format(bucket), target)
 
 
@@ -295,18 +314,20 @@ class IPMatcher(multiprocessing.Process):
         }
         super().__init__()
 
-    async def main(self):
+    @asyncio.coroutine
+    def main(self):
         """Loop forever looking for work from the queue"""
         while True:
             if not self.WORK_QUEUE.empty():
                 traceroute = self.WORK_QUEUE.get()
-                await self.filter_hop_rtt(traceroute)
+                yield from self.filter_hop_rtt(traceroute)
 
 
     def run(self):
         self.LOOP.run_until_complete(self.main())
 
-    async def filter_hop_rtt(self, traceroute):
+    @asyncio.coroutine
+    def filter_hop_rtt(self, traceroute):
         """Given a traceroute result, filter out the unnecessary data and
         hand off for analysis"""
         m_result = traceroute
@@ -316,7 +337,7 @@ class IPMatcher(multiprocessing.Process):
                     continue
                 for address in hop['result']:
                     if 'from' in address.keys():
-                        res = await self.in_monitored_network(
+                        res = yield from self.in_monitored_network(
                             address['from']
                         )
                         if res:
@@ -327,7 +348,8 @@ class IPMatcher(multiprocessing.Process):
     # prefixes, to this code isn't really needed now. Leaving it in just
     # in case anyone wants to do further filtering of the data
     # UPDATE: server side is a WIP, we still need this
-    async def in_monitored_network(self, ip_address):
+    @asyncio.coroutine
+    def in_monitored_network(self, ip_address):
         """Returns true if this is in one of our monitored networks"""
         address = ipaddress.ip_address(ip_address)
         for network in self.NETWORKS[address.version]:
@@ -368,11 +390,13 @@ if __name__ == '__main__':
     policy.set_event_loop(policy.new_event_loop())
     v4_nets = args['--v4_nets']
     v6_nets = args['--v6_nets']
-    if args['-s']:
+    bucket = args['-b']  # 'time_bucket/406642'
+    if bucket:
         measure = Measure(RESULT_QUEUE, OTHER_QUEUE)
-        measure.get_time_bucket('time_bucket/406641')
-        ref = measure.compare_buckets('reference', 'time_bucket/406641', '76.26.120.98')
-        Measure.print_routes(ref)
+        targets = measure.get_targets(bucket)
+        for target in targets:
+            ref = measure.compare_buckets('reference', bucket, target)
+        # Measure.print_routes(ref)
         exit()
     procs = []
     measure = Measure(RESULT_QUEUE, OTHER_QUEUE)
