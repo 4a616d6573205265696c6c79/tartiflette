@@ -4,7 +4,8 @@
 #### Participants
 * Alexandru Manea \<alexandru@fb.com\>
 * Cristel Pelsser \<pelsser@unistra.fr\>
-* James Reggie Reilly \<james@gethostbyname.org\>  
+* James Reggie Reilly \<james@gethostbyname.org\> 
+
 #### Consultants
 * Randy Bush \<randy@psg.com\>
 * Razan K Abdallah \<r.k.nasr@gmail.com\>
